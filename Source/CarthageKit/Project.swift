@@ -51,7 +51,7 @@ public enum ProjectEvent {
 
 public enum ResolverType {
 	case normal, new, fast
-
+	
 	public var resolverClass: ResolverProtocol.Type {
 		switch self {
 		case .normal:
@@ -61,6 +61,17 @@ public enum ResolverType {
 		case .fast:
 			return BackTrackingResolver.self
 		}
+	}
+	
+	public static func from(resolverClass: ResolverProtocol.Type) -> ResolverType? {
+		if resolverClass == Resolver.self {
+			return .normal
+		} else if resolverClass == NewResolver.self {
+			return .new
+		} else if resolverClass == BackTrackingResolver.self {
+			return .fast
+		}
+		return nil
 	}
 }
 
@@ -1447,4 +1458,37 @@ public func cloneOrFetch(
 					}
 				}
 		}
+}
+
+// Diagnostic methods to be able to diagnose problems with the resolver with dependencies which cannot be tested 'live', e.g. for private repositories
+extension Project {
+	
+	// Function which outputs all possible dependencies and versions of those dependencies to the repository specified
+	func storeDependencies(to repository: LocalRepository, ignoreErrors: Bool = false) -> SignalProducer<(), CarthageError> {
+		let resolver = DiagnosticResolver(
+			versionsForDependency: versions(for:),
+			dependenciesForDependency: dependencies(for:version:),
+			resolvedGitReference: resolvedGitReference
+		)
+		resolver.localRepository = repository
+		resolver.ignoreErrors = ignoreErrors
+		return updatedResolvedCartfile(nil, resolver: resolver).map { resolvedCartfile -> () in
+			return
+		}
+	}
+	
+	// Updates dependencies by using the specified repository instead of 'live' lookup for dependencies and their versions
+	func resolveUpdatedDependencies(
+		from repository: LocalRepository,
+		resolverType: ResolverType = .normal,
+		dependenciesToUpdate: [String]? = nil) -> SignalProducer<ResolvedCartfile, CarthageError> {
+		let resolverClass = resolverType.resolverClass
+		let resolver = resolverClass.init(
+			versionsForDependency: repository.versions(for:),
+			dependenciesForDependency: repository.dependencies(for:version:),
+			resolvedGitReference: repository.resolvedGitReference
+		)
+		
+		return updatedResolvedCartfile(dependenciesToUpdate, resolver: resolver)
+	}
 }
