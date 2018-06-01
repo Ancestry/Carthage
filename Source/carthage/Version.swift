@@ -9,7 +9,7 @@ public struct VersionCommand: CommandProtocol {
 	public let function = "Display the current version of Carthage"
 
 	public func run(_ options: NoOptions<CarthageError>) -> Result<(), CarthageError> {
-		carthage.println("\(CarthageKitVersion.current.value)_acom2")
+		carthage.println("\(CarthageKitVersion.current.value)_acom3")
 		return .success(())
 	}
 }
