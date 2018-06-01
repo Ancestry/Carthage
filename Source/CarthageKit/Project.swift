@@ -51,7 +51,7 @@ public enum ProjectEvent {
 
 public enum ResolverType {
 	case normal, new, fast
-	
+
 	public var resolverClass: ResolverProtocol.Type {
 		switch self {
 		case .normal:
@@ -62,7 +62,7 @@ public enum ResolverType {
 			return BackTrackingResolver.self
 		}
 	}
-	
+
 	public static func from(resolverClass: ResolverProtocol.Type) -> ResolverType? {
 		if resolverClass == Resolver.self {
 			return .normal
@@ -320,9 +320,9 @@ public final class Project { // swiftlint:disable:this type_body_length
 	}
 
 	/// Produces the sub dependencies of the given dependency. Uses the checked out directory if able
-	private func dependencySet(for dependency: Dependency, version: PinnedVersion) -> SignalProducer<Set<Dependency>, CarthageError> {
+	private func dependencySet(for dependency: Dependency, version: PinnedVersion, mapping: ((Dependency) -> Dependency)? = nil) -> SignalProducer<Set<Dependency>, CarthageError> {
 		return self.dependencies(for: dependency, version: version, tryCheckoutDirectory: true)
-			.map { $0.0 }
+			.map { mapping?($0.0) ?? ($0.0) }
 			.collect()
 			.map { Set($0) }
 			.concat(value: Set())
@@ -811,7 +811,9 @@ public final class Project { // swiftlint:disable:this type_body_length
 		// dependencies before the projects that depend on them.
 		return SignalProducer<(Dependency, PinnedVersion), CarthageError>(cartfile.dependencies.map { ($0, $1) })
 			.flatMap(.merge) { (dependency: Dependency, version: PinnedVersion) -> SignalProducer<DependencyGraph, CarthageError> in
-				return self.dependencySet(for: dependency, version: version)
+				// Added mapping from name -> Dependency based on the ResolvedCartfile because
+				// duplicate dependencies with the same name (e.g. github forks) should resolve to the same dependency.
+				return self.dependencySet(for: dependency, version: version, mapping: { cartfile.dependency(for: $0.name) ?? $0 })
 					.map { dependencies in
 						[dependency: dependencies]
 					}
@@ -1462,7 +1464,6 @@ public func cloneOrFetch(
 
 // Diagnostic methods to be able to diagnose problems with the resolver with dependencies which cannot be tested 'live', e.g. for private repositories
 extension Project {
-	
 	// Function which outputs all possible dependencies and versions of those dependencies to the repository specified
 	func storeDependencies(to repository: LocalRepository, ignoreErrors: Bool = false) -> SignalProducer<(), CarthageError> {
 		let resolver = DiagnosticResolver(
@@ -1472,11 +1473,9 @@ extension Project {
 		)
 		resolver.localRepository = repository
 		resolver.ignoreErrors = ignoreErrors
-		return updatedResolvedCartfile(nil, resolver: resolver).map { resolvedCartfile -> () in
-			return
-		}
+		return updatedResolvedCartfile(nil, resolver: resolver).map { _ -> Void in return }
 	}
-	
+
 	// Updates dependencies by using the specified repository instead of 'live' lookup for dependencies and their versions
 	func resolveUpdatedDependencies(
 		from repository: LocalRepository,
@@ -1488,7 +1487,7 @@ extension Project {
 			dependenciesForDependency: repository.dependencies(for:version:),
 			resolvedGitReference: repository.resolvedGitReference
 		)
-		
+
 		return updatedResolvedCartfile(dependenciesToUpdate, resolver: resolver)
 	}
 }
