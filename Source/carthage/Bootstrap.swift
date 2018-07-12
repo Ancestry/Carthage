@@ -17,9 +17,19 @@ public struct BootstrapCommand: CommandProtocol {
 				if !FileManager.default.fileExists(atPath: project.resolvedCartfileURL.path) {
 					let formatting = options.checkoutOptions.colorOptions.formatting
 					carthage.println(formatting.bullets + "No Cartfile.resolved found, updating dependencies")
+					let resolverType: ResolverType
+					if options.useNewResolver {
+						resolverType = .new
+					}
+					else if options.useFastResolver {
+						resolverType = .fast
+					}
+					else {
+						resolverType = .normal
+					}
 					return project.updateDependencies(
 						shouldCheckout: options.checkoutAfterUpdate,
-						useNewResolver: options.useNewResolver,
+						resolverType: resolverType,
 						buildOptions: options.buildOptions)
 				}
 
